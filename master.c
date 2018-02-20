@@ -2,9 +2,17 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include <wait.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+
+typedef struct Data
+{
+   int flag[5];
+   char buff[5][200];
+} Data;
+
 
 int main(int argc, char* argv[]) 
 {
@@ -46,32 +54,44 @@ int main(int argc, char* argv[])
             case 'n':
                if (atoi(argv[2]) > 0)
                   n = atoi(argv[2]);
-	       int index = 0;
+               int index = 0;
 	       int counter = 0;
                int status = 0;
                int limit = 17;
+               
                pid_t childpid, donepid = 0;
+               
                char* ccmd = "./consumer";
                char* pcmd = "./producer";
-	       char* buffer[5];
-               int bufFlag[5];
 
-               int i = 0;
-               for ( ; i < 5; i++) 
-               {
-                  buffer[0] = NULL;
-	          bufFlag[0] = 0;
-               } 
+               Data data;
+               Data* p_data;
+               p_data = &data;
+               int key = 123456789;
+               int shmid = shmget(key, sizeof(data), IPC_CREAT | 0666);
+               p_data = shmat(shmid, NULL, 0);
+	      
+               p_data->flag[0] = 1;
+               strcpy(p_data->buff[0], "Hello");
 
-               int flag_id;
-               int flag_key = 10000;
-               //flag_id = shmget(flag_key, sizeof(bufFlag), IPC_CREAT | 0600);
-               //bufFlag = shmat(flag_id, NULL, 0);
+               printf("%d %s\n", p_data->flag[0], p_data->buff[0]);
 
-               int buff_id;
-               int buff_key = 20000;
-               //buff_id = shmget(buff_key, sizeof(buffer), IPC_CREAT | 0600);
-               //buffer = shmat(buff_id, NULL, 0);
+               //char (*buffers)[5][200];
+               //int (*flags)[5];
+
+               //int flag_id;
+               //int flag_key = 12345678;
+               //flag_id = shmget(flag_key, sizeof(*flags), IPC_CREAT | 0666);
+               //flags = shmat(flag_id, 0, 0);
+               //*flags[0] = 55;
+               //printf("%d\n", *flags[0]);
+
+               //int buff_id;
+               //int buff_key = 87654321;
+               //buff_id = shmget(buff_key, sizeof(*buffers), IPC_CREAT | 0666);
+               //buffers = shmat(buff_id, 0, 0);
+               //strcpy(*buffers[0], "Hello");
+               //printf("%s\n", *buffers[0]);
 
                char n_str[12];
                char id_str[12];
@@ -137,7 +157,12 @@ int main(int argc, char* argv[])
                   counter--;
                   fprintf(stdout, "%s: Process %ld finished(2).\n", argv[0], (long)donepid);
                }
-            
+  
+               //shmdt(flags);
+               shmdt(p_data);
+               shmctl(shmid, IPC_RMID, 0); 
+               //shmctl(buff_id, IPC_RMID, 0);            
+               
                break;
 
             case ':':
@@ -146,8 +171,7 @@ int main(int argc, char* argv[])
 
             case '?':
                fprintf(stderr, "");
-         }
-
+         } 
          return 0;
       }
    }

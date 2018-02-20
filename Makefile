@@ -16,4 +16,4 @@ consumer: $(OBJ3)
 	$(CC) -o $@ $^
 
 clean:
-	rm -rf *.o $(PROGS)
+	rm -rf *.o *.log $(PROGS)
