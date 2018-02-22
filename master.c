@@ -6,33 +6,32 @@
 #include <wait.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include "master.h"
 
-typedef struct Data
-{
-   int flag[5];
-   char buff[5][200];
-} Data;
-
-
+//State of master process
 int main(int argc, char* argv[]) 
 {
-   int c = 0;
-   int n = 10;
+   int c = 0;     //Option variable
+   int n = 10;    //default number of consomers
 
+   //Check for invalid number of arguments
    if (argc != 2 && argc != 3) 
    {
       fprintf(stderr, "%s: Error: Invalid number of arguments\n", argv[0]);
       return -1;
    }
 
+   //Two args:
    else if (argc == 2) 
    {
+      //Check options
       while ((c = getopt(argc, argv, "h")) != -1) 
       {
          switch(c) 
          {
+            //Display help menu
             case 'h':
-	       fprintf(stdout, "");
+	       fprintf(stdout, "%s: Help : ./master -n [NUMBER OF PRODUCERS]", argv[0]);
                break;
 
             case ':':
@@ -45,78 +44,79 @@ int main(int argc, char* argv[])
       }
    }
 
+   //Three args:
    else if (argc == 3) 
    {
+      //Check options
       while ((c = getopt(argc, argv, "n:")) != 1) 
       {
          switch(c) 
          {
+            //Start of main computation:
             case 'n':
+               //Update number of consumers
                if (atoi(argv[2]) > 0)
                   n = atoi(argv[2]);
+               
+               //Local int variables
                int index = 0;
 	       int counter = 0;
                int status = 0;
                int limit = 17;
                
+               //PID variables
                pid_t childpid, donepid = 0;
-               
+
+               //Executable names
                char* ccmd = "./consumer";
                char* pcmd = "./producer";
 
+               //Shared Memory
                Data data;
-               Data* p_data;
-               p_data = &data;
+               Data* b_data;
+               b_data = &data;
                int key = 123456789;
                int shmid = shmget(key, sizeof(data), IPC_CREAT | 0666);
-               p_data = shmat(shmid, NULL, 0);
-	      
-               p_data->flag[0] = 1;
-               strcpy(p_data->buff[0], "Hello");
+               b_data = shmat(shmid, NULL, 0);
+	       
+               //Initialize the shared memory
+               int i = 0; 
+               for (i = 0; i < 5; i++) { 
+                  b_data->bFlag[i] = 0;
+                  strcpy(b_data->buff[i], "\0");
+               }
 
-               printf("%d %s\n", p_data->flag[0], p_data->buff[0]);
+               b_data->done = 0;
 
-               //char (*buffers)[5][200];
-               //int (*flags)[5];
-
-               //int flag_id;
-               //int flag_key = 12345678;
-               //flag_id = shmget(flag_key, sizeof(*flags), IPC_CREAT | 0666);
-               //flags = shmat(flag_id, 0, 0);
-               //*flags[0] = 55;
-               //printf("%d\n", *flags[0]);
-
-               //int buff_id;
-               //int buff_key = 87654321;
-               //buff_id = shmget(buff_key, sizeof(*buffers), IPC_CREAT | 0666);
-               //buffers = shmat(buff_id, 0, 0);
-               //strcpy(*buffers[0], "Hello");
-               //printf("%s\n", *buffers[0]);
-
+               //Create parameters for producer
                char n_str[12];
                char id_str[12];
                sprintf(n_str, "%d", n);
                sprintf(id_str, "%d", index);
 
+               //Fork the producer child
 	       childpid = fork();
+
                switch(childpid)
                {
+                  //Check for error
                   case -1:
-                     perror("producer failed to fork");
-                     return 1;
- 
-                  case 0:
-                     printf("Attempting to exec producer %ld\n", (long)getpid());
-                     execl(pcmd, "producer", n_str, id_str, NULL);
+                     fprintf(stderr, "%s: Error: Failed to fork producer", argv[0]);
                      break;
+ 
+                  //Produder process executes
+                  case 0:
+                     fprintf(stdout, "%s: Attempting to exec producer %ld\n", argv[0], (long)getpid());
+                     if ( execl(pcmd, pcmd, n_str, id_str, NULL) == -1 )
+		        fprintf(stderr, "%s: Error: Failed to exec producer", argv[0]);
 
-                  default:
-                     while ((donepid = waitpid(-1, &status, WNOHANG)) > 0)
-                        fprintf(stdout, "%s: Process %ld finished(0).\n", argv[0], (long)donepid);
+                     break;
                }
 
+               //Loop for the number of consumers
                for ( ; index < n; index++) 
                {
+                  //Check if process limit reached
                   if (counter == limit) 
                   { 
                      fprintf(stdout, "%s: Process limit reached. Waiting...\n", argv[0]);
@@ -125,45 +125,45 @@ int main(int argc, char* argv[])
 		     fprintf(stdout, "%s: Process %ld finished. %d child processes running.\n", argv[0], (long)donepid, counter);
                   }
 
+                  //Fork a producer
                   childpid = fork();
                   counter++;
+
+                  //Create parameters for consumer
                   char n_str[12];
                   char id_str[12];
                   sprintf(n_str, "%d", n);
                   sprintf(id_str, "%d", index);
 
+                  //Check for error
                   if (childpid == -1)
-                     fprintf(stderr, "fork error\n");
+                     fprintf(stderr, "%s: Error: Failed to fork consumer\n");
 
+                  //Consumer process executes
                   else if (childpid == 0) 
                   {
-                     printf("Attempting to exec consumer %ld\n", (long)getpid());
-                     execl(ccmd, "consumer", n_str, id_str, NULL);
+                     fprintf(stdout, "%s: Attempting to exec consumer %ld\n", argv[0], (long)getpid());
+                     if (execl(ccmd, ccmd, n_str, id_str, NULL) == -1)
+                        fprintf(stderr, "%s: Error: Failed to exec consumer\n");
                      exit(0);
                   }
 
-                  else 
-                  {
-                     while ((donepid = waitpid(-1, &status, WNOHANG)) > 0)
-                     {
-                        counter--;
-                        fprintf(stdout, "%s: Process %ld finished(1).\n", argv[0], (long)donepid);
-                     }
-                  }
 	       }
 
+               //Master process waits for all children
+               fprintf(stdout, "%s: Waiting...\n", argv[0]);
                while ((donepid = wait(&status)) > 0) 
                {
                   counter--;
-                  fprintf(stdout, "%s: Process %ld finished(2).\n", argv[0], (long)donepid);
+                  fprintf(stdout, "%s: Process %ld finished.\n", argv[0], (long)donepid);
                }
   
-               //shmdt(flags);
-               shmdt(p_data);
-               shmctl(shmid, IPC_RMID, 0); 
-               //shmctl(buff_id, IPC_RMID, 0);            
+               //Delete shared memory
+               shmdt(b_data);
+               shmctl(shmid, IPC_RMID, 0);
                
-               break;
+               //End program
+               return 0;;
 
             case ':':
                fprintf(stderr, "");
@@ -172,7 +172,8 @@ int main(int argc, char* argv[])
             case '?':
                fprintf(stderr, "");
          } 
-         return 0;
+         return 1;
       }
    }
+   return 2;
 }

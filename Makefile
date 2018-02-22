@@ -1,7 +1,7 @@
 CC = gcc -g
 PROGS = master producer consumer
-OBJ1 = master.o 
-OBJ2 = producer.o 
+OBJ1 = master.o
+OBJ2 = producer.o
 OBJ3 = consumer.o
 
 all: $(PROGS)
